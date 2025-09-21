@@ -438,7 +438,7 @@ export default function OrderDetail() {
             className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
           >
             <Printer className="w-4 h-4" />
-            <span>Imprimer (onglet)</span>
+            <span>Imprimer</span>
           </button>
           <Link
             to={`/commandes/${order.id}/modifier`}
