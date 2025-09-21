@@ -405,7 +405,7 @@ export default function OrderDetail() {
     (order.items as OrderItem[]).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 
   // ----------------- UI écran (quantités FR) -----------------
- return (
+  return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -425,7 +425,7 @@ export default function OrderDetail() {
             </p>
           </div>
         </div>
-        
+
         <div className="flex items-center space-x-3">
           <button
             onClick={handleDownloadPDF}
@@ -435,11 +435,11 @@ export default function OrderDetail() {
             <span>PDF</span>
           </button>
           <button
-            onClick={handlePrintDeliveryNote}
+            onClick={handlePrintInNewTab}
             className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
           >
             <Printer className="w-4 h-4" />
-            <span>Imprimer</span>
+            <span>Imprimer (onglet)</span>
           </button>
           <Link
             to={`/commandes/${order.id}/modifier`}
@@ -450,8 +450,7 @@ export default function OrderDetail() {
           </Link>
         </div>
       </div>
-
-      {/* Informations principales */}
+    {/* Informations principales */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Informations commande */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
