@@ -114,7 +114,7 @@ export default function OrderDetail() {
       html2canvas: { 
         scale: 2,
         useCORS: true, // active le chargement d’images externes via CORS
-        logging: false,
+        logging: true,
         backgroundColor: '#ffffff'
       }, // NOTE: allowTaint supprimé pour éviter un canvas "tainted"
       jsPDF: { 
