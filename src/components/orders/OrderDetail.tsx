@@ -1,4 +1,3 @@
-// src/components/orders/OrderDetail.tsx
 import React from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useOrder } from '../../contexts/OrderContext';
@@ -7,7 +6,11 @@ import {
   ArrowLeft, Printer, Download, Edit, Package, DollarSign,
   Building2, Phone, Mail, MapPin, User
 } from 'lucide-react';
-import html2pdf from 'html2pdf.js';
+
+// IMPORTANT: installer ces deps si absentes:
+// npm i jspdf html2canvas
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 type OrderItem = {
   productName: string;
@@ -18,8 +21,9 @@ type OrderItem = {
   total: number;
 };
 
-const A4W = 794;  // 8.27in * 96dpi
-const A4H = 1123; // 11.69in * 96dpi
+// A4 à 96dpi (plus stable pour html2canvas)
+const A4W = 794;   // 8.27in * 96
+const A4H = 1123;  // 11.69in * 96
 
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>();
@@ -34,18 +38,10 @@ export default function OrderDetail() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
-            Commande non trouvée
-          </h2>
-          <p className="text-gray-600 dark:text-gray-300 mb-4">
-            La commande demandée n'existe pas ou a été supprimée.
-          </p>
-          <Link
-            to="/commandes"
-            className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Retour aux commandes</span>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Commande non trouvée</h2>
+          <p className="text-gray-600 dark:text-gray-300 mb-4">La commande demandée n'existe pas ou a été supprimée.</p>
+          <Link to="/commandes" className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+            <ArrowLeft className="w-4 h-4" /><span>Retour aux commandes</span>
           </Link>
         </div>
       </div>
@@ -53,15 +49,13 @@ export default function OrderDetail() {
   }
 
   const getClientName = () =>
-    order.clientType === 'personne_physique'
-      ? (order.clientName || 'Client particulier')
-      : (order.client?.name || 'Client société');
+    order.clientType === 'personne_physique' ? (order.clientName || 'Client particulier') : (order.client?.name || 'Client société');
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'livre':
         return <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">✅ Livré</span>;
-      case 'en_cours_livraison':
+    case 'en_cours_livraison':
         return <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300">🚚 En cours de livraison</span>;
       case 'annule':
         return <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">❌ Annulé</span>;
@@ -70,57 +64,76 @@ export default function OrderDetail() {
     }
   };
 
-  const handlePrintDeliveryNote = () => {
-    // why: utiliser le même DOM que PDF pour cohérence
-    const { container, root, cleanup } = buildPdfDom();
-    document.body.appendChild(container);
-    window.print(); // l’aperçu imprimera l’ensemble
-    cleanup();
-  };
+  // ====== ACTIONS PDF ======
 
   const handleDownloadPDF = async () => {
+    const pdf = await buildPdf(); // save
+    pdf.save(`Bon_Livraison_${order.number}.pdf`);
+  };
+
+  const handleOpenPrintTab = async () => {
+    const pdf = await buildPdf(); // open new tab & print
+    const blob = pdf.output('blob');
+    const url = URL.createObjectURL(blob);
+
+    // nouvelle fenêtre + impression
+    const win = window.open('', '_blank');
+    if (!win) return;
+    win.document.write(`
+      <!DOCTYPE html><html><head><title>Impression - ${order.number}</title></head>
+      <body style="margin:0">
+        <iframe src="${url}" style="border:0;position:fixed;top:0;left:0;width:100%;height:100%"></iframe>
+        <script>
+          const iframe = document.querySelector('iframe');
+          iframe.addEventListener('load', () => {
+            try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch(e) {}
+          });
+        </script>
+      </body></html>
+    `);
+    win.document.close();
+  };
+
+  /** Construit un jsPDF multi-page à partir d'un DOM hors-écran */
+  const buildPdf = async () => {
     const { container, root, cleanup } = buildPdfDom();
     document.body.appendChild(container);
 
     try {
-      // attendre les images (logo) pour éviter canvas blanc
-      await waitForImages(root, 12000);
+      await waitForImages(root, 12000); // why: éviter canvas blanc
+      const sections = Array.from(root.querySelectorAll<HTMLElement>('section.page'));
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
 
-      const options = {
-        margin: 0,
-        filename: `Bon_Livraison_${order.number}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: {
+      for (let i = 0; i < sections.length; i++) {
+        const pageEl = sections[i];
+
+        const canvas = await html2canvas(pageEl, {
           scale: 2,
-          useCORS: true,              // indispensable pour logo CDN
-          imageTimeout: 15000,
+          useCORS: true,
           backgroundColor: '#ffffff',
-          logging: false
-        },
-        pagebreak: { mode: ['css', 'legacy'] },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      } as const;
+          imageTimeout: 15000,
+          logging: false,
+          allowTaint: false
+        });
 
-      await html2pdf().set(options).from(root).save();
-    } catch (err) {
-      console.error('Erreur PDF:', err);
-      alert('Erreur lors de la génération du PDF');
+        const imgData = canvas.toDataURL('image/jpeg', 0.98);
+        // Remplit toute la page A4
+        pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+        if (i < sections.length - 1) pdf.addPage();
+      }
+
+      return pdf;
     } finally {
       cleanup();
     }
   };
 
-  /** découpe les items en pages */
+  /** Paginate items: 1ère / intermédiaires / dernière */
   const splitItems = (items: OrderItem[]) => {
-    const FIRST = 12;
-    const MIDDLE = 18;
-    const LAST = 10;
-
+    const FIRST = 12, MIDDLE = 18, LAST = 10;
     const pages: { rows: OrderItem[]; first: boolean; last: boolean }[] = [];
-    if (items.length <= FIRST + LAST) {
-      pages.push({ rows: items, first: true, last: true });
-      return pages;
-    }
+    if (items.length <= FIRST + LAST) return [{ rows: items, first: true, last: true }];
+
     pages.push({ rows: items.slice(0, FIRST), first: true, last: false });
     let i = FIRST;
     while (items.length - i > LAST) {
@@ -131,7 +144,7 @@ export default function OrderDetail() {
     return pages;
   };
 
-  /** construit le DOM A4 multi-page hors-écran (pas de <html> string) */
+  /** DOM A4 multi-page hors-écran */
   const buildPdfDom = () => {
     const logoUrl = (user as any)?.company?.logo || '';
     const companyName = user?.company?.name || '';
@@ -152,11 +165,11 @@ export default function OrderDetail() {
 
     const container = document.createElement('div');
     container.style.position = 'fixed';
-    container.style.left = '-10000px'; // hors écran mais visible
+    container.style.left = '-10000px'; // visible mais hors viewport
     container.style.top = '0';
     container.style.width = `${A4W}px`;
-    container.style.zIndex = '9999';
     container.style.background = '#fff';
+    container.style.zIndex = '9999';
 
     const style = document.createElement('style');
     style.textContent = getPdfCss();
@@ -168,16 +181,8 @@ export default function OrderDetail() {
 
     const pages = splitItems(items);
 
-    pages.forEach((p, idx) => {
-      const page = document.createElement('section');
-      page.className = `page${idx > 0 ? ' break-before' : ''}`;
-      page.style.width = `${A4W}px`;
-      page.style.height = `${A4H}px`;
-
-      // Header
-      const header = document.createElement('div');
-      header.className = 'page-header';
-      header.innerHTML = `
+    const headerHtml = `
+      <div class="page-header">
         <div class="brand">
           ${
             (logoUrl && `<img data-logo src="${logoUrl}" alt="Logo" class="logo" crossorigin="anonymous" referrerpolicy="no-referrer" />`)
@@ -195,10 +200,32 @@ export default function OrderDetail() {
           ${order.deliveryDate ? `<div><b>Livraison:</b> ${new Date(order.deliveryDate).toLocaleString('fr-FR')}</div>` : ''}
           <div><b>Statut:</b> ${order.status === 'livre' ? 'Livré' : (order.status === 'en_cours_livraison' ? 'En cours' : 'Annulé')}</div>
         </div>
-      `;
-      page.appendChild(header);
+      </div>
+    `;
 
-      // Body
+    const footerHtml = `
+      <div class="page-footer">
+        <span><b>${companyName}</b></span>
+        ${companyAddress ? `<span> | ${companyAddress}</span>` : ''}
+        ${companyPhone ? `<span> | Tél: ${companyPhone}</span>` : ''}
+        ${companyEmail ? `<span> | Email: ${companyEmail}</span>` : ''}
+        ${companyIce ? `<span> | ICE: ${companyIce}</span>` : ''}
+        ${companyIf ? `<span> | IF: ${companyIf}</span>` : ''}
+        ${companyRc ? `<span> | RC: ${companyRc}</span>` : ''}
+        ${companyPatente ? `<span> | Patente: ${companyPatente}</span>` : ''}
+      </div>
+    `;
+
+    pages.forEach((p, idx) => {
+      const page = document.createElement('section');
+      page.className = `page${idx > 0 ? ' break-before' : ''}`;
+      page.style.width = `${A4W}px`;
+      page.style.height = `${A4H}px`;
+
+      const header = document.createElement('div');
+      header.innerHTML = headerHtml;
+      page.appendChild(header.firstElementChild!);
+
       const body = document.createElement('div');
       body.className = 'page-body';
 
@@ -228,7 +255,6 @@ export default function OrderDetail() {
         body.appendChild(extras);
       }
 
-      // Table
       const table = document.createElement('table');
       table.className = 'items';
       table.innerHTML = `
@@ -278,44 +304,25 @@ export default function OrderDetail() {
 
       page.appendChild(body);
 
-      // Footer
       const footer = document.createElement('div');
-      footer.className = 'page-footer';
-      footer.innerHTML = `
-        <span><b>${companyName}</b></span>
-        ${companyAddress ? `<span> | ${companyAddress}</span>` : ''}
-        ${companyPhone ? `<span> | Tél: ${companyPhone}</span>` : ''}
-        ${companyEmail ? `<span> | Email: ${companyEmail}</span>` : ''}
-        ${companyIce ? `<span> | ICE: ${companyIce}</span>` : ''}
-        ${companyIf ? `<span> | IF: ${companyIf}</span>` : ''}
-        ${companyRc ? `<span> | RC: ${companyRc}</span>` : ''}
-        ${companyPatente ? `<span> | Patente: ${companyPatente}</span>` : ''}
-      `;
-      page.appendChild(footer);
+      footer.innerHTML = footerHtml;
+      page.appendChild(footer.firstElementChild!);
 
       root.appendChild(page);
     });
 
-    // fallback si le logo casse le canvas (CORS)
+    // Si le logo casse (CORS), on le masque → pas de page blanche
     root.querySelectorAll('img[data-logo]').forEach(img => {
-      img.addEventListener('error', () => {
-        (img as HTMLImageElement).style.display = 'none';
-      }, { once: true });
+      img.addEventListener('error', () => { (img as HTMLImageElement).style.display = 'none'; }, { once: true });
     });
 
-    const cleanup = () => {
-      if (document.body.contains(container)) document.body.removeChild(container);
-    };
-
+    const cleanup = () => { if (document.body.contains(container)) document.body.removeChild(container); };
     return { container, root, cleanup };
   };
 
-  /** CSS A4 en pixels (fiable pour html2canvas) */
+  /** CSS en px pour un rendu canvas stable */
   const getPdfCss = () => `
-    :root{
-      --primary:#1f52d1; --ink:#0f172a; --muted:#64748b;
-      --border:#e5e7eb; --muted-bg:#f7fafc; --accent:#eaf3ff;
-    }
+    :root{ --primary:#1f52d1; --ink:#0f172a; --muted:#64748b; --border:#e5e7eb; --muted-bg:#f7fafc; --accent:#eaf3ff; }
     *{ box-sizing:border-box; }
     #pdf-root{ width:${A4W}px; }
     .page{ width:${A4W}px; height:${A4H}px; background:#fff; color:var(--ink); font:12px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; padding:48px 48px 56px 48px; position:relative; display:flex; flex-direction:column; }
@@ -354,14 +361,14 @@ export default function OrderDetail() {
     .page-footer{ position:absolute; left:48px; right:48px; bottom:24px; border-top:1px solid var(--border); padding-top:8px; text-align:center; font-size:10px; color:#334155; }
   `;
 
-  /** attend le chargement des images du root (évite canvas blanc) */
+  /** attend le chargement des images du root */
   const waitForImages = (root: HTMLElement, timeoutMs = 10000) => {
     const imgs = Array.from(root.querySelectorAll('img'));
     if (imgs.length === 0) return Promise.resolve();
     return new Promise<void>((resolve) => {
       let done = 0;
       const check = () => (++done === imgs.length) && resolve();
-      const timer = setTimeout(() => resolve(), timeoutMs); // why: ne pas bloquer indéfiniment
+      setTimeout(() => resolve(), timeoutMs); // ne pas bloquer
       imgs.forEach((img) => {
         const el = img as HTMLImageElement;
         if (el.complete && el.naturalWidth > 0) return check();
@@ -374,15 +381,12 @@ export default function OrderDetail() {
   const getTotalQuantity = () =>
     (order.items as OrderItem[]).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 
+  // ====== UI écran (inchangée) ======
   return (
     <div className="space-y-6">
-      {/* Header app */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <button
-            onClick={() => navigate('/commandes')}
-            className="p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-          >
+          <button onClick={() => navigate('/commandes')} className="p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
@@ -390,12 +394,13 @@ export default function OrderDetail() {
             <p className="text-gray-600 dark:text-gray-300">Détails et bon de livraison</p>
           </div>
         </div>
+
         <div className="flex items-center space-x-3">
           <button onClick={handleDownloadPDF} className="inline-flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors">
             <Download className="w-4 h-4" /><span>PDF</span>
           </button>
-          <button onClick={handlePrintDeliveryNote} className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
-            <Printer className="w-4 h-4" /><span>Imprimer</span>
+          <button onClick={handleOpenPrintTab} className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+            <Printer className="w-4 h-4" /><span>Imprimer (onglet)</span>
           </button>
           <Link to={`/commandes/${order.id}/modifier`} className="inline-flex items-center space-x-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg transition-colors">
             <Edit className="w-4 h-4" /><span>Modifier</span>
