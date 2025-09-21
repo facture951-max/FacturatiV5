@@ -127,7 +127,7 @@ export default function OrderDetail() {
 
   const generateDeliveryNoteHTML = () => {
     // why: éviter CORS cassé → utiliser logo via URL avec header CORS ; sinon fallback texte
-    const logoUrl = (user as any)?.company?.logoUrl || '';
+    const logoUrl = (user as any)?.company?.logo || '';
     const companyName = user?.company?.name || '';
     const companyAddress = user?.company?.address || '';
     const companyPhone = user?.company?.phone || '';
