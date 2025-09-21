@@ -102,8 +102,8 @@ export default function OrderDetail() {
     tempDiv.style.left = '0';
     tempDiv.style.width = '210mm';
     tempDiv.style.backgroundColor = 'white';
-    tempDiv.style.zIndex = '-1';
-    tempDiv.style.opacity = '0';
+    tempDiv.style.zIndex = '9999';
+    tempDiv.style.opacity = '1';
     tempDiv.innerHTML = deliveryNoteContent;
     document.body.appendChild(tempDiv);
 
