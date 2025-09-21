@@ -1,20 +1,10 @@
-// src/components/orders/OrderDetail.tsx
 import React from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useOrder } from '../../contexts/OrderContext';
 import { useAuth } from '../../contexts/AuthContext';
 import {
-  ArrowLeft,
-  Printer,
-  Download,
-  Edit,
-  Package,
-  DollarSign,
-  Building2,
-  Phone,
-  Mail,
-  MapPin,
-  User
+  ArrowLeft, Printer, Download, Edit, Package, DollarSign,
+  Building2, Phone, Mail, MapPin, User
 } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 
@@ -75,18 +65,15 @@ export default function OrderDetail() {
   };
 
   const getClientName = () => {
-    if (order.clientType === 'personne_physique') {
-      return order.clientName || 'Client particulier';
-    } else {
-      return order.client?.name || 'Client société';
-    }
+    if (order.clientType === 'personne_physique') return order.clientName || 'Client particulier';
+    return order.client?.name || 'Client société';
   };
 
   const handlePrintDeliveryNote = () => {
-    const deliveryNoteContent = generateDeliveryNoteHTML();
+    const html = generateDeliveryNoteHTML();
     const w = window.open('', '_blank');
     if (w) {
-      w.document.write(deliveryNoteContent);
+      w.document.write(html);
       w.document.close();
       w.focus();
       w.print();
@@ -94,40 +81,56 @@ export default function OrderDetail() {
   };
 
   const handleDownloadPDF = () => {
-    const deliveryNoteContent = generateDeliveryNoteHTML();
+    // why: on mesure/scale dans le DOM pour garantir 1 page A4
+    const container = document.createElement('div');
+    container.style.position = 'fixed';
+    container.style.left = '-10000px';  // hors écran (visible pour html2canvas)
+    container.style.top = '0';
+    container.style.width = '210mm';
+    container.style.background = '#fff';
+    container.innerHTML = generateDeliveryNoteHTML(); // injecte le markup
+    document.body.appendChild(container);
+
+    // calcule l'échelle pour tenir en 297mm
+    const sheet = container.querySelector('.sheet') as HTMLElement | null;
+    if (sheet) {
+      // A4 visible hauteur en px (html2canvas ≈ 96dpi → px/mm fiable)
+      const a4HeightPx = sheet.clientHeight;            // 297mm (fixe via CSS)
+      const renderedHeightPx = sheet.scrollHeight;      // contenu réel
+      const scale = Math.min(1, a4HeightPx / Math.max(1, renderedHeightPx));
+      sheet.style.setProperty('--scale', String(scale));
+    }
 
     const options = {
-      margin: [10, 10, 10, 10],
+      margin: 0,                         // pas de marge côté PDF (on gère en CSS)
       filename: `Bon_Livraison_${order.number}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: {
         scale: 2,
-        useCORS: true, // pour charger logo/images externes sans “taint”
+        useCORS: true,
         imageTimeout: 15000,
         backgroundColor: '#ffffff',
         logging: false
       },
-      jsPDF: {
-        unit: 'mm',
-        format: 'a4',
-        orientation: 'portrait'
-      }
+      pagebreak: { mode: ['avoid-all'] },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
     } as const;
 
-    // Important: capture depuis la chaîne HTML (pas un nœud caché)
     html2pdf()
       .set(options)
-      .from(deliveryNoteContent)
+      .from(container)
       .save()
       .catch((err: unknown) => {
-        console.error('Erreur lors de la génération du PDF:', err);
+        console.error('Erreur PDF:', err);
         alert('Erreur lors de la génération du PDF');
+      })
+      .finally(() => {
+        if (document.body.contains(container)) document.body.removeChild(container);
       });
   };
 
   const generateDeliveryNoteHTML = () => {
-    // why: éviter CORS cassé → utiliser logo via URL avec header CORS ; sinon fallback texte
-    const logoUrl = (user as any)?.company?.logo || '';
+    const logoUrl = (user as any)?.company?.logo|| '';
     const companyName = user?.company?.name || '';
     const companyAddress = user?.company?.address || '';
     const companyPhone = user?.company?.phone || '';
@@ -137,154 +140,94 @@ export default function OrderDetail() {
     const companyRc = (user as any)?.company?.rc || '';
     const companyPatente = (user as any)?.company?.patente || '';
 
-    return `
-<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Bon de Livraison ${order.number}</title>
-  <style>
-    :root{
-      --primary:#2563eb;        /* bleu */
-      --primary-600:#1e40af;
-      --ink:#0f172a;
-      --muted:#64748b;
-      --border:#e5e7eb;
-      --bg:#ffffff;
-      --muted-bg:#f8fafc;
-      --accent:#eef2ff;
-      --success:#16a34a;
-    }
+<meta charset="UTF-8"/>
+<title>Bon de Livraison ${order.number}</title>
+<style>
+  :root {
+    --primary:#1f52d1; --primary-600:#173e9d;
+    --ink:#0f172a; --muted:#64748b;
+    --border:#e5e7eb; --bg:#ffffff; --muted-bg:#f7fafc;
+    --scale:1; /* auto ajustée par JS */
+  }
 
-    @page { size: A4; margin: 12mm; }
-    html,body { background: var(--bg); padding:0; margin:0; }
-    body {
-      font: 12px/1.5 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
-      color: var(--ink);
-    }
+  @page { size: A4; margin: 0; }
+  html, body { margin:0; padding:0; background:#fff; }
+  body { font: calc(12px * var(--scale)) / 1.45 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color:var(--ink); }
 
-    /* A4 wrapper */
-    .sheet {
-      width: 210mm;
-      min-height: 297mm;
-      margin: 0 auto;
-      box-sizing: border-box;
-      position: relative;
-      background: #fff;
-    }
-    .content {
-      padding: 12mm;
-    }
+  /* Feuille A4 fixe */
+  .sheet {
+    width: 210mm; height: 297mm; background: #fff; box-sizing: border-box;
+    display: flex; flex-direction: column;
+  }
+  .wrap { flex: 1 1 auto; padding: calc(10mm * var(--scale)); display:flex; flex-direction:column; gap: calc(6mm * var(--scale)); }
 
-    /* header */
-    .header{
-      display:flex;
-      align-items:center;
-      gap:16px;
-      border-bottom: 2px solid var(--primary);
-      padding-bottom: 12px;
-      margin-bottom: 12px;
-    }
-    .logo{
-      width: 48px; height: 48px; object-fit: contain;
-    }
-    .brand{
-      display:flex; flex-direction:column; gap:2px;
-    }
-    .brand-name{
-      font-weight:700; font-size:18px; letter-spacing:.3px;
-    }
-    .brand-meta{
-      color:var(--muted); font-size:11px;
-    }
+  /* Header */
+  .topbar { display:flex; align-items:center; gap: calc(8px * var(--scale)); }
+  .logo { width: calc(22mm * var(--scale)); height: calc(22mm * var(--scale)); object-fit: contain; }
+  .brand { display:flex; flex-direction:column; line-height:1.2; }
+  .brand-name { font-weight:800; font-size: calc(16px * var(--scale)); letter-spacing:.2px; }
+  .brand-meta { color:var(--muted); font-size: calc(11px * var(--scale)); }
 
-    .title{
-      text-align:center;
-      font-weight:800;
-      color: var(--primary);
-      font-size:22px;
-      letter-spacing:.6px;
-      margin: 4px 0 10px 0;
-    }
+  .title { text-align:center; color:var(--primary); font-weight:800; letter-spacing:.6px;
+    font-size: calc(16px * var(--scale)); padding: calc(3mm * var(--scale)) 0; border-top:1px solid var(--border); border-bottom:2px solid var(--primary);
+  }
 
-    /* cards */
-    .grid-2{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
-    .card{
-      border: 1px solid var(--border);
-      border-radius:8px;
-      background: var(--muted-bg);
-      padding:10px 12px;
-    }
-    .card.order{ background:#f0f7ff; border-color:#bfdbfe; }
-    .card h3{
-      margin:0 0 6px 0; font-size:12px; letter-spacing:.3px; color:#111827;
-    }
-    .kv{ margin:2px 0; font-size:12px; }
-    .kv b{ color:#111827; }
-    .muted{ color:var(--muted); font-style:italic; }
+  /* Cards */
+  .grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap: calc(4mm * var(--scale)); }
+  .card { border:1px solid var(--border); border-radius: calc(6px * var(--scale)); background:var(--muted-bg); padding: calc(4mm * var(--scale)); }
+  .card.order { background:#eaf3ff; border-color:#c8ddff; }
+  .card h3 { margin:0 0 calc(2mm * var(--scale)) 0; font-size: calc(12px * var(--scale)); letter-spacing:.2px; }
+  .kv { margin: calc(1mm * var(--scale)) 0; }
+  .muted { color:var(--muted); font-style: italic; }
 
-    /* table */
-    table{ width:100%; border-collapse: collapse; margin-top:10px; }
-    th, td { border: 1px solid var(--border); padding:8px; }
-    thead th {
-      background: #f3f4f6; font-weight:700; font-size:12px;
-    }
-    td.num, th.num { text-align:right; white-space:nowrap; }
-    td.center, th.center { text-align:center; }
-    tbody tr:nth-child(even){ background:#fafafa; }
+  /* Table */
+  table { width:100%; border-collapse:collapse; }
+  th, td { border:1px solid var(--border); padding: calc(2.6mm * var(--scale)) calc(2mm * var(--scale)); }
+  thead th { background:#f3f4f6; font-weight:700; font-size: calc(12px * var(--scale)); }
+  td.num, th.num { text-align:right; white-space:nowrap; }
+  td.center, th.center { text-align:center; }
+  tbody tr:nth-child(even){ background:#fbfdff; }
 
-    /* totals */
-    .totals{
-      margin-top:12px; display:flex; justify-content:flex-end;
-    }
-    .totals .box{
-      width: 60%; max-width: 280px;
-    }
-    .totals .row{
-      display:flex; justify-content:space-between; padding:4px 0; font-size:12px;
-    }
-    .totals .grand{
-      color: var(--primary); font-weight:800; font-size:14px; padding-top:6px; border-top:1px dashed var(--border);
-    }
+  /* Totaux */
+  .totals { display:flex; justify-content:flex-end; }
+  .totals .box { width: 60%; max-width: calc(60mm * var(--scale)); }
+  .row { display:flex; justify-content:space-between; padding: calc(1.2mm * var(--scale)) 0; }
+  .grand { color:var(--primary); font-weight:800; border-top:1px dashed var(--border); margin-top: calc(1mm * var(--scale)); }
 
-    /* signatures */
-    .signatures{
-      margin-top:18px; display:grid; grid-template-columns: 1fr 1fr; gap:16px;
-    }
-    .sign-box{
-      height: 90px; border:2px solid #d1d5db; border-radius:6px; text-align:center; padding:10px;
-    }
-    .sign-title{ font-weight:700; margin:0; }
-    .sign-sub{ margin:6px 0 0 0; font-size:11px; color:var(--muted); }
+  /* Signatures */
+  .signatures { display:grid; grid-template-columns:1fr 1fr; gap: calc(4mm * var(--scale)); }
+  .sign { border:2px solid #d1d5db; border-radius: calc(6px * var(--scale)); text-align:center; padding: calc(5mm * var(--scale)) 0; }
+  .sign .t { font-weight:700; }
+  .sign .s { margin-top: calc(1mm * var(--scale)); font-size: calc(11px * var(--scale)); color:var(--muted); }
 
-    /* footer */
-    .footer{
-      position:absolute; left:12mm; right:12mm; bottom:12mm;
-      border-top:1px solid var(--border);
-      padding-top:8px; text-align:center; color:#334155; font-size:10px;
-    }
+  /* Footer */
+  .footer { margin: 0 calc(10mm * var(--scale)) calc(6mm * var(--scale)) calc(10mm * var(--scale));
+    padding-top: calc(2mm * var(--scale)); border-top:1px solid var(--border);
+    text-align:center; font-size: calc(10px * var(--scale)); color:#334155;
+  }
 
-    /* helpers */
-    .status{
-      display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600;
-      background:#dcfce7; color:#166534;
-    }
-  </style>
+  /* Badge statut */
+  .status { display:inline-block; padding: 2px 8px; border-radius:999px; font-size: calc(11px * var(--scale));
+    background:#dcfce7; color:#166534; font-weight:600;
+  }
+</style>
 </head>
 <body>
   <div class="sheet">
-    <div class="content">
-      <div class="header">
+    <div class="wrap">
+      <div class="topbar">
         ${
           logoUrl
             ? `<img src="${logoUrl}" alt="Logo" class="logo" crossorigin="anonymous" referrerpolicy="no-referrer" />`
-            : `<div style="width:48px;height:48px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--primary)">${
-                (companyName || 'SOCIETE').trim().slice(0,2).toUpperCase()
-              }</div>`
+            : `<div class="logo" style="display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:8px;color:var(--primary);font-weight:800;">
+                 ${(companyName || 'SOCIETE').slice(0,2).toUpperCase()}
+               </div>`
         }
         <div class="brand">
-          <div class="brand-name">${companyName || ''}</div>
+          <div class="brand-name">${companyName}</div>
           <div class="brand-meta">${companyAddress || ''}</div>
         </div>
       </div>
@@ -310,7 +253,7 @@ export default function OrderDetail() {
           <div class="kv"><b>Date:</b> ${new Date(order.orderDate).toLocaleString('fr-FR')}</div>
           ${order.deliveryDate ? `<div class="kv"><b>Livraison:</b> ${new Date(order.deliveryDate).toLocaleString('fr-FR')}</div>` : ''}
           <div class="kv"><b>Statut:</b> <span class="status">${
-            order.status === 'livre' ? 'Livré' : order.status === 'en_cours_livraison' ? 'En cours' : 'Annulé'
+            order.status === 'livre' ? 'Livré' : (order.status === 'en_cours_livraison' ? 'En cours' : 'Annulé')
           }</span></div>
         </div>
       </div>
@@ -345,36 +288,28 @@ export default function OrderDetail() {
       </div>
 
       <div class="signatures">
-        <div class="sign-box">
-          <p class="sign-title">Signature Client</p>
-          <p class="sign-sub">Bon pour accord</p>
-        </div>
-        <div class="sign-box">
-          <p class="sign-title">Signature Livreur</p>
-          <p class="sign-sub">Date et heure</p>
-        </div>
+        <div class="sign"><div class="t">Signature Client</div><div class="s">Bon pour accord</div></div>
+        <div class="sign"><div class="t">Signature Livreur</div><div class="s">Date et heure</div></div>
       </div>
+    </div>
 
-      <div class="footer">
-        <b>${companyName || ''}</b>
-        ${companyAddress ? ` | ${companyAddress}` : ''}
-        ${companyPhone ? ` | Tél: ${companyPhone}` : ''}
-        ${companyEmail ? ` | Email: ${companyEmail}` : ''}
-        ${companyIce ? ` | ICE: ${companyIce}` : ''}
-        ${companyIf ? ` | IF: ${companyIf}` : ''}
-        ${companyRc ? ` | RC: ${companyRc}` : ''}
-        ${companyPatente ? ` | Patente: ${companyPatente}` : ''}
-      </div>
+    <div class="footer">
+      <b>${companyName}</b>
+      ${companyAddress ? ` | ${companyAddress}` : ''}
+      ${companyPhone ? ` | Tél: ${companyPhone}` : ''}
+      ${companyEmail ? ` | Email: ${companyEmail}` : ''}
+      ${companyIce ? ` | ICE: ${companyIce}` : ''}
+      ${companyIf ? ` | IF: ${companyIf}` : ''}
+      ${companyRc ? ` | RC: ${companyRc}` : ''}
+      ${companyPatente ? ` | Patente: ${companyPatente}` : ''}
     </div>
   </div>
 </body>
-</html>
-    `;
+</html>`;
   };
 
-  const getTotalQuantity = () => {
-    return order.items.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
-  };
+  const getTotalQuantity = () =>
+    order.items.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -388,12 +323,8 @@ export default function OrderDetail() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              Commande {order.number}
-            </h1>
-            <p className="text-gray-600 dark:text-gray-300">
-              Détails et bon de livraison
-            </p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Commande {order.number}</h1>
+            <p className="text-gray-600 dark:text-gray-300">Détails et bon de livraison</p>
           </div>
         </div>
 
