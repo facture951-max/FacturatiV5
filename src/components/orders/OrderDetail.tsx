@@ -3,11 +3,11 @@ import React from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useOrder } from '../../contexts/OrderContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { 
-  ArrowLeft, 
-  Printer, 
-  Download, 
-  Edit, 
+import {
+  ArrowLeft,
+  Printer,
+  Download,
+  Edit,
   Package,
   DollarSign,
   Building2,
@@ -23,7 +23,7 @@ export default function OrderDetail() {
   const navigate = useNavigate();
   const { getOrderById } = useOrder();
   const { user } = useAuth();
-  
+
   const order = id ? getOrderById(id) : null;
 
   if (!order) {
@@ -84,12 +84,12 @@ export default function OrderDetail() {
 
   const handlePrintDeliveryNote = () => {
     const deliveryNoteContent = generateDeliveryNoteHTML();
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(deliveryNoteContent);
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.print();
+    const w = window.open('', '_blank');
+    if (w) {
+      w.document.write(deliveryNoteContent);
+      w.document.close();
+      w.focus();
+      w.print();
     }
   };
 
@@ -100,144 +100,280 @@ export default function OrderDetail() {
       margin: [10, 10, 10, 10],
       filename: `Bon_Livraison_${order.number}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { 
+      html2canvas: {
         scale: 2,
-        useCORS: true, // éviter canvas "tainted" avec images externes
-        logging: false,
-        backgroundColor: '#ffffff'
+        useCORS: true, // pour charger logo/images externes sans “taint”
+        imageTimeout: 15000,
+        backgroundColor: '#ffffff',
+        logging: false
       },
-      jsPDF: { 
-        unit: 'mm', 
-        format: 'a4', 
-        orientation: 'portrait' 
+      jsPDF: {
+        unit: 'mm',
+        format: 'a4',
+        orientation: 'portrait'
       }
     } as const;
 
-    // ⚠️ Important: on capture la chaîne HTML directement.
+    // Important: capture depuis la chaîne HTML (pas un nœud caché)
     html2pdf()
       .set(options)
       .from(deliveryNoteContent)
       .save()
-      .catch((error: unknown) => {
-        console.error('Erreur lors de la génération du PDF:', error);
+      .catch((err: unknown) => {
+        console.error('Erreur lors de la génération du PDF:', err);
         alert('Erreur lors de la génération du PDF');
       });
   };
 
   const generateDeliveryNoteHTML = () => {
+    // why: éviter CORS cassé → utiliser logo via URL avec header CORS ; sinon fallback texte
+    const logoUrl = (user as any)?.company?.logoUrl || '';
+    const companyName = user?.company?.name || '';
+    const companyAddress = user?.company?.address || '';
+    const companyPhone = user?.company?.phone || '';
+    const companyEmail = user?.company?.email || '';
+    const companyIce = (user as any)?.company?.ice || '';
+    const companyIf = (user as any)?.company?.if || '';
+    const companyRc = (user as any)?.company?.rc || '';
+    const companyPatente = (user as any)?.company?.patente || '';
+
     return `
-      <!DOCTYPE html>
-      <html lang="fr">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Bon de Livraison ${order.number}</title>
-        <style>
-          @page { size: A4; margin: 15mm; }
-          body { font-family: Arial, sans-serif; line-height: 1.5; color: #333; margin: 0; padding: 20px; }
-          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #3B82F6; padding-bottom: 20px; }
-          .company-info { display: flex; justify-content: space-between; margin-bottom: 30px; }
-          .client-info { background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; }
-          .order-info { background: #f0f9ff; padding: 15px; border-radius: 8px; border: 1px solid #0ea5e9; }
-          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-          th, td { padding: 12px; text-align: left; border: 1px solid #e5e7eb; }
-          th { background: #f3f4f6; font-weight: bold; }
-          .totals { margin-top: 20px; text-align: right; }
-          .signature { margin-top: 30px; display: flex; justify-content: space-between; }
-          .signature-box { width: 200px; height: 100px; border: 2px solid #d1d5db; text-align: center; padding: 10px; }
-          .footer { margin-top: 40px; text-align: center; font-size: 12px; color: #6b7280; border-top: 1px solid #d1d5db; padding-top: 15px; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1 style="font-size: 32px; color: #3B82F6; margin: 0;">BON DE LIVRAISON</h1>
-          <h2 style="font-size: 24px; color: #1f2937; margin: 10px 0;">${user?.company?.name || ''}</h2>
-          <p style="color: #6b7280;">${user?.company?.address || ''}</p>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Bon de Livraison ${order.number}</title>
+  <style>
+    :root{
+      --primary:#2563eb;        /* bleu */
+      --primary-600:#1e40af;
+      --ink:#0f172a;
+      --muted:#64748b;
+      --border:#e5e7eb;
+      --bg:#ffffff;
+      --muted-bg:#f8fafc;
+      --accent:#eef2ff;
+      --success:#16a34a;
+    }
+
+    @page { size: A4; margin: 12mm; }
+    html,body { background: var(--bg); padding:0; margin:0; }
+    body {
+      font: 12px/1.5 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      color: var(--ink);
+    }
+
+    /* A4 wrapper */
+    .sheet {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      box-sizing: border-box;
+      position: relative;
+      background: #fff;
+    }
+    .content {
+      padding: 12mm;
+    }
+
+    /* header */
+    .header{
+      display:flex;
+      align-items:center;
+      gap:16px;
+      border-bottom: 2px solid var(--primary);
+      padding-bottom: 12px;
+      margin-bottom: 12px;
+    }
+    .logo{
+      width: 48px; height: 48px; object-fit: contain;
+    }
+    .brand{
+      display:flex; flex-direction:column; gap:2px;
+    }
+    .brand-name{
+      font-weight:700; font-size:18px; letter-spacing:.3px;
+    }
+    .brand-meta{
+      color:var(--muted); font-size:11px;
+    }
+
+    .title{
+      text-align:center;
+      font-weight:800;
+      color: var(--primary);
+      font-size:22px;
+      letter-spacing:.6px;
+      margin: 4px 0 10px 0;
+    }
+
+    /* cards */
+    .grid-2{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    .card{
+      border: 1px solid var(--border);
+      border-radius:8px;
+      background: var(--muted-bg);
+      padding:10px 12px;
+    }
+    .card.order{ background:#f0f7ff; border-color:#bfdbfe; }
+    .card h3{
+      margin:0 0 6px 0; font-size:12px; letter-spacing:.3px; color:#111827;
+    }
+    .kv{ margin:2px 0; font-size:12px; }
+    .kv b{ color:#111827; }
+    .muted{ color:var(--muted); font-style:italic; }
+
+    /* table */
+    table{ width:100%; border-collapse: collapse; margin-top:10px; }
+    th, td { border: 1px solid var(--border); padding:8px; }
+    thead th {
+      background: #f3f4f6; font-weight:700; font-size:12px;
+    }
+    td.num, th.num { text-align:right; white-space:nowrap; }
+    td.center, th.center { text-align:center; }
+    tbody tr:nth-child(even){ background:#fafafa; }
+
+    /* totals */
+    .totals{
+      margin-top:12px; display:flex; justify-content:flex-end;
+    }
+    .totals .box{
+      width: 60%; max-width: 280px;
+    }
+    .totals .row{
+      display:flex; justify-content:space-between; padding:4px 0; font-size:12px;
+    }
+    .totals .grand{
+      color: var(--primary); font-weight:800; font-size:14px; padding-top:6px; border-top:1px dashed var(--border);
+    }
+
+    /* signatures */
+    .signatures{
+      margin-top:18px; display:grid; grid-template-columns: 1fr 1fr; gap:16px;
+    }
+    .sign-box{
+      height: 90px; border:2px solid #d1d5db; border-radius:6px; text-align:center; padding:10px;
+    }
+    .sign-title{ font-weight:700; margin:0; }
+    .sign-sub{ margin:6px 0 0 0; font-size:11px; color:var(--muted); }
+
+    /* footer */
+    .footer{
+      position:absolute; left:12mm; right:12mm; bottom:12mm;
+      border-top:1px solid var(--border);
+      padding-top:8px; text-align:center; color:#334155; font-size:10px;
+    }
+
+    /* helpers */
+    .status{
+      display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600;
+      background:#dcfce7; color:#166534;
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="content">
+      <div class="header">
+        ${
+          logoUrl
+            ? `<img src="${logoUrl}" alt="Logo" class="logo" crossorigin="anonymous" referrerpolicy="no-referrer" />`
+            : `<div style="width:48px;height:48px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--primary)">${
+                (companyName || 'SOCIETE').trim().slice(0,2).toUpperCase()
+              }</div>`
+        }
+        <div class="brand">
+          <div class="brand-name">${companyName || ''}</div>
+          <div class="brand-meta">${companyAddress || ''}</div>
         </div>
-        
-        <div class="company-info">
-          <div class="client-info" style="width: 48%;">
-            <h3 style="font-size: 16px; font-weight: bold; color: #1f2937; margin-bottom: 10px;">CLIENT</h3>
-            <p style="font-weight: bold; margin: 5px 0;">${getClientName()}</p>
-            ${order.clientType === 'societe' && order.client ? `
-              <p style="margin: 5px 0;">ICE: ${order.client.ice}</p>
-              <p style="margin: 5px 0;">Adresse: ${order.client.address}</p>
-              <p style="margin: 5px 0;">Tél: ${order.client.phone}</p>
-              <p style="margin: 5px 0;">Email: ${order.client.email}</p>
-            ` : `
-              <p style="margin: 5px 0; font-style: italic;">Client particulier</p>
-            `}
-          </div>
-          
-          <div class="order-info" style="width: 48%;">
-            <h3 style="font-size: 16px; font-weight: bold; color: #1f2937; margin-bottom: 10px;">COMMANDE</h3>
-            <p style="margin: 5px 0;"><strong>N°:</strong> ${order.number}</p>
-            <p style="margin: 5px 0;"><strong>Date:</strong> ${new Date(order.orderDate).toLocaleString('fr-FR')}</p>
-            ${order.deliveryDate ? `
-              <p style="margin: 5px 0;"><strong>Livraison:</strong> ${new Date(order.deliveryDate).toLocaleString('fr-FR')}</p>
-            ` : ''}
-            <p style="margin: 5px 0;"><strong>Statut:</strong> ${
-              order.status === 'livre' ? 'Livré' :
-              order.status === 'en_cours_livraison' ? 'En cours' : 'Annulé'
-            }</p>
-          </div>
+      </div>
+
+      <div class="title">BON DE LIVRAISON</div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>CLIENT</h3>
+          <div class="kv"><b>${getClientName()}</b></div>
+          ${
+            order.clientType === 'societe' && order.client ? `
+              <div class="kv">ICE: ${order.client.ice || ''}</div>
+              <div class="kv">Adresse: ${order.client.address || ''}</div>
+              <div class="kv">Tél: ${order.client.phone || ''}</div>
+              <div class="kv">Email: ${order.client.email || ''}</div>
+            ` : `<div class="kv muted">Client particulier</div>`
+          }
         </div>
-        
-        <table>
-          <thead>
+        <div class="card order">
+          <h3>COMMANDE</h3>
+          <div class="kv"><b>N°:</b> ${order.number}</div>
+          <div class="kv"><b>Date:</b> ${new Date(order.orderDate).toLocaleString('fr-FR')}</div>
+          ${order.deliveryDate ? `<div class="kv"><b>Livraison:</b> ${new Date(order.deliveryDate).toLocaleString('fr-FR')}</div>` : ''}
+          <div class="kv"><b>Statut:</b> <span class="status">${
+            order.status === 'livre' ? 'Livré' : order.status === 'en_cours_livraison' ? 'En cours' : 'Annulé'
+          }</span></div>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>PRODUIT</th>
+            <th class="center">QUANTITÉ</th>
+            <th class="num">PRIX UNIT. HT</th>
+            <th class="num">TOTAL HT</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${order.items.map((item: any) => `
             <tr>
-              <th>PRODUIT</th>
-              <th style="text-align: center;">QUANTITÉ</th>
-              <th style="text-align: center;">PRIX UNIT. HT</th>
-              <th style="text-align: center;">TOTAL HT</th>
+              <td>${item.productName}</td>
+              <td class="center">${Number(item.quantity).toFixed(3)} ${item.unit || 'unité'}</td>
+              <td class="num">${Number(item.unitPrice).toFixed(2)} MAD</td>
+              <td class="num"><b>${Number(item.total).toFixed(2)} MAD</b></td>
             </tr>
-          </thead>
-          <tbody>
-            ${order.items.map((item: any) => `
-              <tr>
-                <td>${item.productName}</td>
-                <td style="text-align: center;">${item.quantity.toFixed(3)} ${item.unit || 'unité'}</td>
-                <td style="text-align: center;">${item.unitPrice.toFixed(2)} MAD</td>
-                <td style="text-align: center; font-weight: bold;">${item.total.toFixed(2)} MAD</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        
-        <div class="totals">
-          <p style="margin: 5px 0;"><strong>Sous-total HT:</strong> ${order.subtotal.toFixed(2)} MAD</p>
-          ${order.totalVat > 0 ? `<p style="margin: 5px 0;"><strong>TVA:</strong> ${order.totalVat.toFixed(2)} MAD</p>` : ''}
-          <p style="margin: 10px 0; font-size: 18px; font-weight: bold; color: #3B82F6;">
-            <strong>TOTAL TTC: ${order.totalTTC.toFixed(2)} MAD</strong>
-          </p>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <div class="totals">
+        <div class="box">
+          <div class="row"><span><b>Sous-total HT</b></span><span>${Number(order.subtotal).toFixed(2)} MAD</span></div>
+          ${order.totalVat > 0 ? `<div class="row"><span><b>TVA</b></span><span>${Number(order.totalVat).toFixed(2)} MAD</span></div>` : ''}
+          <div class="row grand"><span>TOTAL TTC</span><span>${Number(order.totalTTC).toFixed(2)} MAD</span></div>
         </div>
-        
-        <div class="signature">
-          <div class="signature-box">
-            <p style="margin: 0; font-weight: bold;">Signature Client</p>
-            <p style="margin: 5px 0; font-size: 12px;">Bon pour accord</p>
-          </div>
-          <div class="signature-box">
-            <p style="margin: 0; font-weight: bold;">Signature Livreur</p>
-            <p style="margin: 5px 0; font-size: 12px;">Date et heure</p>
-          </div>
+      </div>
+
+      <div class="signatures">
+        <div class="sign-box">
+          <p class="sign-title">Signature Client</p>
+          <p class="sign-sub">Bon pour accord</p>
         </div>
-        
-        <div class="footer">
-          <p>
-            <strong>${user?.company?.name || ''}</strong> | ${user?.company?.address || ''} | 
-            Tél: ${user?.company?.phone || ''} | Email: ${user?.company?.email || ''} | 
-            ICE: ${user?.company?.ice || ''} | IF: ${user?.company?.if || ''} | 
-            RC: ${user?.company?.rc || ''} | Patente: ${user?.company?.patente || ''}
-          </p>
+        <div class="sign-box">
+          <p class="sign-title">Signature Livreur</p>
+          <p class="sign-sub">Date et heure</p>
         </div>
-      </body>
-      </html>
+      </div>
+
+      <div class="footer">
+        <b>${companyName || ''}</b>
+        ${companyAddress ? ` | ${companyAddress}` : ''}
+        ${companyPhone ? ` | Tél: ${companyPhone}` : ''}
+        ${companyEmail ? ` | Email: ${companyEmail}` : ''}
+        ${companyIce ? ` | ICE: ${companyIce}` : ''}
+        ${companyIf ? ` | IF: ${companyIf}` : ''}
+        ${companyRc ? ` | RC: ${companyRc}` : ''}
+        ${companyPatente ? ` | Patente: ${companyPatente}` : ''}
+      </div>
+    </div>
+  </div>
+</body>
+</html>
     `;
   };
 
   const getTotalQuantity = () => {
-    return order.items.reduce((sum: number, item: any) => sum + item.quantity, 0);
+    return order.items.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
   };
 
   return (
@@ -260,7 +396,7 @@ export default function OrderDetail() {
             </p>
           </div>
         </div>
-        
+
         <div className="flex items-center space-x-3">
           <button
             onClick={handleDownloadPDF}
@@ -286,15 +422,14 @@ export default function OrderDetail() {
         </div>
       </div>
 
-      {/* Informations principales */}
+      {/* Infos principales */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Informations commande */}
+        {/* Commande */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center space-x-3 mb-4">
             <Package className="w-6 h-6 text-blue-600" />
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Informations Commande</h3>
           </div>
-          
           <div className="space-y-3">
             <div>
               <span className="text-sm text-gray-600 dark:text-gray-400">Numéro:</span>
@@ -316,9 +451,7 @@ export default function OrderDetail() {
             )}
             <div>
               <span className="text-sm text-gray-600 dark:text-gray-400">Statut:</span>
-              <div className="mt-1">
-                {getStatusBadge(order.status)}
-              </div>
+              <div className="mt-1">{getStatusBadge(order.status)}</div>
             </div>
             <div>
               <span className="text-sm text-gray-600 dark:text-gray-400">Stock débité:</span>
@@ -329,7 +462,7 @@ export default function OrderDetail() {
           </div>
         </div>
 
-        {/* Informations client */}
+        {/* Client */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center space-x-3 mb-4">
             {order.clientType === 'personne_physique' ? (
@@ -341,13 +474,13 @@ export default function OrderDetail() {
               {order.clientType === 'personne_physique' ? 'Client Particulier' : 'Client Société'}
             </h3>
           </div>
-          
+
           <div className="space-y-3">
             <div>
               <span className="text-sm text-gray-600 dark:text-gray-400">Nom:</span>
               <p className="font-medium text-gray-900 dark:text-gray-100">{getClientName()}</p>
             </div>
-            
+
             {order.clientType === 'societe' && order.client && (
               <>
                 <div>
@@ -377,27 +510,27 @@ export default function OrderDetail() {
             <DollarSign className="w-6 h-6 text-purple-600" />
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Totaux</h3>
           </div>
-          
+
           <div className="space-y-3">
             <div className="flex justify-between">
               <span className="text-sm text-gray-600 dark:text-gray-400">Sous-total HT:</span>
               <span className="font-medium text-gray-900 dark:text-gray-100">{order.subtotal.toFixed(2)} MAD</span>
             </div>
-            
+
             {order.totalVat > 0 && (
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600 dark:text-gray-400">TVA:</span>
                 <span className="font-medium text-gray-900 dark:text-gray-100">{order.totalVat.toFixed(2)} MAD</span>
               </div>
             )}
-            
+
             <div className="border-t border-gray-200 dark:border-gray-600 pt-3">
               <div className="flex justify-between">
                 <span className="font-medium text-gray-900 dark:text-gray-100">Total TTC:</span>
                 <span className="text-xl font-bold text-blue-600">{order.totalTTC.toFixed(2)} MAD</span>
               </div>
             </div>
-            
+
             <div className="mt-4 text-center">
               <span className="text-sm text-gray-600 dark:text-gray-400">Quantité totale:</span>
               <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
@@ -413,7 +546,7 @@ export default function OrderDetail() {
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Articles Commandés</h3>
         </div>
-        
+
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-700">
@@ -447,16 +580,16 @@ export default function OrderDetail() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                    {item.quantity.toFixed(3)}
+                    {Number(item.quantity).toFixed(3)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                    {item.unitPrice.toFixed(2)} MAD
+                    {Number(item.unitPrice).toFixed(2)} MAD
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                     {item.vatRate}%
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {item.total.toFixed(2)} MAD
+                    {Number(item.total).toFixed(2)} MAD
                   </td>
                 </tr>
               ))}
