@@ -4,6 +4,7 @@ import { useOrder } from '../../contexts/OrderContext';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import OrderStatusModal from './OrderStatusModal';
+import OrderActionsGuide from './OrderActionsGuide';
 import { 
   Plus, 
   Search, 
@@ -581,6 +582,9 @@ export default function OrdersList() {
           onUpdateStatus={updateOrderStatus}
         />
       )}
+
+      {/* Guide des actions */}
+      <OrderActionsGuide />
     </div>
   );
 }
