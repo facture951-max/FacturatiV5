@@ -212,7 +212,6 @@ export default function OrderDetail() {
           }
           <div class="brand-info">
             <div class="brand-name">${companyName}</div>
-            <div class="brand-meta">${companyAddress || ''}</div>
           </div>
         </div>
         <div class="doc-title">BON DE LIVRAISON</div>
