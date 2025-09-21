@@ -1,3 +1,4 @@
+// src/components/orders/OrderDetail.tsx
 import React from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useOrder } from '../../contexts/OrderContext';
@@ -7,15 +8,13 @@ import {
   Printer, 
   Download, 
   Edit, 
-  Calendar, 
-  User, 
   Package,
   DollarSign,
-  FileText,
   Building2,
   Phone,
   Mail,
-  MapPin
+  MapPin,
+  User
 } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 
@@ -85,7 +84,6 @@ export default function OrderDetail() {
 
   const handlePrintDeliveryNote = () => {
     const deliveryNoteContent = generateDeliveryNoteHTML();
-    
     const printWindow = window.open('', '_blank');
     if (printWindow) {
       printWindow.document.write(deliveryNoteContent);
@@ -115,31 +113,30 @@ export default function OrderDetail() {
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { 
         scale: 2,
-        useCORS: false,
-        allowTaint: true,
+        useCORS: true, // active le chargement d’images externes via CORS
         logging: false,
         backgroundColor: '#ffffff'
-      },
+      }, // NOTE: allowTaint supprimé pour éviter un canvas "tainted"
       jsPDF: { 
         unit: 'mm', 
         format: 'a4', 
         orientation: 'portrait' 
       }
-    };
+    } as const;
 
     html2pdf()
       .set(options)
       .from(tempDiv)
       .save()
-      .then(() => {
-        document.body.removeChild(tempDiv);
-      })
-      .catch((error) => {
+      .catch((error: unknown) => {
         console.error('Erreur lors de la génération du PDF:', error);
+        alert('Erreur lors de la génération du PDF');
+      })
+      .finally(() => {
+        // Toujours nettoyer, succès ou échec
         if (document.body.contains(tempDiv)) {
           document.body.removeChild(tempDiv);
         }
-        alert('Erreur lors de la génération du PDF');
       });
   };
 
