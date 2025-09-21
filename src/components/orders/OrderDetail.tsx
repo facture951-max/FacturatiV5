@@ -21,7 +21,7 @@ import html2pdf from 'html2pdf.js';
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { orders, getOrderById } = useOrder();
+  const { getOrderById } = useOrder();
   const { user } = useAuth();
   
   const order = id ? getOrderById(id) : null;
@@ -95,17 +95,6 @@ export default function OrderDetail() {
 
   const handleDownloadPDF = () => {
     const deliveryNoteContent = generateDeliveryNoteHTML();
-    
-    const tempDiv = document.createElement('div');
-    tempDiv.style.position = 'fixed';
-    tempDiv.style.top = '0';
-    tempDiv.style.left = '0';
-    tempDiv.style.width = '210mm';
-    tempDiv.style.backgroundColor = 'white';
-    tempDiv.style.zIndex = '9999';
-    tempDiv.style.opacity = '1';
-    tempDiv.innerHTML = deliveryNoteContent;
-    document.body.appendChild(tempDiv);
 
     const options = {
       margin: [10, 10, 10, 10],
@@ -113,10 +102,10 @@ export default function OrderDetail() {
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { 
         scale: 2,
-        useCORS: true, // active le chargement d’images externes via CORS
-        logging: true,
+        useCORS: true, // éviter canvas "tainted" avec images externes
+        logging: false,
         backgroundColor: '#ffffff'
-      }, // NOTE: allowTaint supprimé pour éviter un canvas "tainted"
+      },
       jsPDF: { 
         unit: 'mm', 
         format: 'a4', 
@@ -124,19 +113,14 @@ export default function OrderDetail() {
       }
     } as const;
 
+    // ⚠️ Important: on capture la chaîne HTML directement.
     html2pdf()
       .set(options)
-      .from(tempDiv)
+      .from(deliveryNoteContent)
       .save()
       .catch((error: unknown) => {
         console.error('Erreur lors de la génération du PDF:', error);
         alert('Erreur lors de la génération du PDF');
-      })
-      .finally(() => {
-        // Toujours nettoyer, succès ou échec
-        if (document.body.contains(tempDiv)) {
-          document.body.removeChild(tempDiv);
-        }
       });
   };
 
