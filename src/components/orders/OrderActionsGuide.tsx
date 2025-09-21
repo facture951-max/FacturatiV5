@@ -434,7 +434,7 @@ export default function OrderActionsGuide() {
                     <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-green-200 dark:border-green-600">
                       <p className="text-sm text-green-800 dark:text-green-200 leading-relaxed">
                         <strong>🔗 Nouvelle Logique de Stock :</strong> Les commandes gèrent maintenant le stock automatiquement. 
-                        Le stock est débité quand une commande est "en cours" ou "livrée", et ré-injecté si elle est "annulée". 
+                        Le stock est débité quand une commande est "en cours\" ou "livrée", et ré-injecté si elle est "annulée". 
                         Les factures ne gèrent plus le stock - elles servent uniquement pour la facturation et comptabilité.
                       </p>
                     </div>
