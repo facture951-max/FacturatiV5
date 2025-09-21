@@ -133,7 +133,7 @@ export default function OrderDetail() {
 
   /** construit le DOM A4 multi-page hors-écran (pas de <html> string) */
   const buildPdfDom = () => {
-    const logoUrl = (user as any)?.company?.logoUrl || '';
+    const logoUrl = (user as any)?.company?.logo || '';
     const companyName = user?.company?.name || '';
     const companyAddress = user?.company?.address || '';
     const companyPhone = user?.company?.phone || '';
