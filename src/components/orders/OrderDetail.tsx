@@ -405,6 +405,246 @@ export default function OrderDetail() {
     (order.items as OrderItem[]).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 
   // ----------------- UI écran (quantités FR) -----------------
+ return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <button
+            onClick={() => navigate('/commandes')}
+            className="p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              Commande {order.number}
+            </h1>
+            <p className="text-gray-600 dark:text-gray-300">
+              Détails et bon de livraison
+            </p>
+          </div>
+        </div>
+        
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={handleDownloadPDF}
+            className="inline-flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            <span>PDF</span>
+          </button>
+          <button
+            onClick={handlePrintDeliveryNote}
+            className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            <Printer className="w-4 h-4" />
+            <span>Imprimer</span>
+          </button>
+          <Link
+            to={`/commandes/${order.id}/modifier`}
+            className="inline-flex items-center space-x-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            <Edit className="w-4 h-4" />
+            <span>Modifier</span>
+          </Link>
+        </div>
+      </div>
 
+      {/* Informations principales */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Informations commande */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <div className="flex items-center space-x-3 mb-4">
+            <Package className="w-6 h-6 text-blue-600" />
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Informations Commande</h3>
+          </div>
+          
+          <div className="space-y-3">
+            <div>
+              <span className="text-sm text-gray-600 dark:text-gray-400">Numéro:</span>
+              <p className="font-medium text-gray-900 dark:text-gray-100">{order.number}</p>
+            </div>
+            <div>
+              <span className="text-sm text-gray-600 dark:text-gray-400">Date de commande:</span>
+              <p className="font-medium text-gray-900 dark:text-gray-100">
+                {new Date(order.orderDate).toLocaleString('fr-FR')}
+              </p>
+            </div>
+            {order.deliveryDate && (
+              <div>
+                <span className="text-sm text-gray-600 dark:text-gray-400">Date de livraison:</span>
+                <p className="font-medium text-gray-900 dark:text-gray-100">
+                  {new Date(order.deliveryDate).toLocaleString('fr-FR')}
+                </p>
+              </div>
+            )}
+            <div>
+              <span className="text-sm text-gray-600 dark:text-gray-400">Statut:</span>
+              <div className="mt-1">
+                {getStatusBadge(order.status)}
+              </div>
+            </div>
+            <div>
+              <span className="text-sm text-gray-600 dark:text-gray-400">Stock débité:</span>
+              <p className={`font-medium ${order.stockDebited ? 'text-red-600' : 'text-green-600'}`}>
+                {order.stockDebited ? 'Oui' : 'Non'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Informations client */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <div className="flex items-center space-x-3 mb-4">
+            {order.clientType === 'personne_physique' ? (
+              <User className="w-6 h-6 text-green-600" />
+            ) : (
+              <Building2 className="w-6 h-6 text-blue-600" />
+            )}
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {order.clientType === 'personne_physique' ? 'Client Particulier' : 'Client Société'}
+            </h3>
+          </div>
+          
+          <div className="space-y-3">
+            <div>
+              <span className="text-sm text-gray-600 dark:text-gray-400">Nom:</span>
+              <p className="font-medium text-gray-900 dark:text-gray-100">{getClientName()}</p>
+            </div>
+            
+            {order.clientType === 'societe' && order.client && (
+              <>
+                <div>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">ICE:</span>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">{order.client.ice}</p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <MapPin className="w-4 h-4 text-gray-400" />
+                  <p className="text-sm text-gray-700 dark:text-gray-300">{order.client.address}</p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Phone className="w-4 h-4 text-gray-400" />
+                  <p className="text-sm text-gray-700 dark:text-gray-300">{order.client.phone}</p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Mail className="w-4 h-4 text-gray-400" />
+                  <p className="text-sm text-gray-700 dark:text-gray-300">{order.client.email}</p>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Totaux */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <div className="flex items-center space-x-3 mb-4">
+            <DollarSign className="w-6 h-6 text-purple-600" />
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Totaux</h3>
+          </div>
+          
+          <div className="space-y-3">
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Sous-total HT:</span>
+              <span className="font-medium text-gray-900 dark:text-gray-100">{order.subtotal.toFixed(2)} MAD</span>
+            </div>
+            
+            {order.totalVat > 0 && (
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">TVA:</span>
+                <span className="font-medium text-gray-900 dark:text-gray-100">{order.totalVat.toFixed(2)} MAD</span>
+              </div>
+            )}
+            
+            <div className="border-t border-gray-200 dark:border-gray-600 pt-3">
+              <div className="flex justify-between">
+                <span className="font-medium text-gray-900 dark:text-gray-100">Total TTC:</span>
+                <span className="text-xl font-bold text-blue-600">{order.totalTTC.toFixed(2)} MAD</span>
+              </div>
+            </div>
+            
+            <div className="mt-4 text-center">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Quantité totale:</span>
+              <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                {getTotalQuantity().toFixed(1)}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Articles détaillés */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Articles Commandés</h3>
+        </div>
+        
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-700">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Produit
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Quantité
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Prix Unitaire HT
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  TVA
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Total HT
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+              {order.items.map((item: any, index: number) => (
+                <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      {item.productName}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      Unité: {item.unit || 'unité'}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    {item.quantity.toFixed(3)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    {item.unitPrice.toFixed(2)} MAD
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    {item.vatRate}%
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {item.total.toFixed(2)} MAD
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Informations supplémentaires */}
+      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-6">
+        <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-3">📋 Informations de Livraison</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-blue-800 dark:text-blue-200">
+          <div>
+            <p><strong>Type de client:</strong> {order.clientType === 'personne_physique' ? 'Particulier' : 'Société'}</p>
+            <p><strong>TVA appliquée:</strong> {order.applyVat ? 'Oui' : 'Non'}</p>
+          </div>
+          <div>
+            <p><strong>Articles:</strong> {order.items.length}</p>
+            <p><strong>Quantité totale:</strong> {getTotalQuantity().toFixed(1)}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
