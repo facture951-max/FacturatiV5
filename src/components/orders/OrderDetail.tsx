@@ -168,7 +168,7 @@ export default function OrderDetail() {
   };
 
   const buildPdfDom = () => {
-    const logoUrl = (user as any)?.company?.logoUrl || '';
+    const logoUrl = (user as any)?.company?.logo || '';
     const companyName = user?.company?.name || '';
     const companyAddress = user?.company?.address || '';
     const companyPhone = user?.company?.phone || '';
