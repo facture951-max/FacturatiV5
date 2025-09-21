@@ -1,3 +1,4 @@
+// src/components/orders/OrderDetail.tsx
 import React from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useOrder } from '../../contexts/OrderContext';
@@ -7,7 +8,6 @@ import {
   Building2, Phone, Mail, MapPin, User
 } from 'lucide-react';
 
-// IMPORTANT: installer ces deps si absentes:
 // npm i jspdf html2canvas
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -21,9 +21,26 @@ type OrderItem = {
   total: number;
 };
 
-// A4 à 96dpi (plus stable pour html2canvas)
-const A4W = 794;   // 8.27in * 96
-const A4H = 1123;  // 11.69in * 96
+// A4 en px @96dpi (stable pour html2canvas)
+const A4W = 794;   // 210mm
+const A4H = 1123;  // 297mm
+
+// ----- Formatage FR -----
+const UNITS_3DP = new Set([
+  'kg','kilogramme','kilogrammes',
+  'l','litre','litres',
+  't','tonne','tonnes','ton'
+]);
+const formatQtyFR = (value: number, unit?: string) => {
+  const u = (unit || '').toLowerCase().trim();
+  const is3 = UNITS_3DP.has(u);
+  return new Intl.NumberFormat('fr-FR', {
+    minimumFractionDigits: is3 ? 3 : 0,
+    maximumFractionDigits: is3 ? 3 : 3
+  }).format(Number(value || 0));
+};
+const formatMoneyFR = (value: number) =>
+  `${new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value||0))} MAD`;
 
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>();
@@ -38,76 +55,83 @@ export default function OrderDetail() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Commande non trouvée</h2>
-          <p className="text-gray-600 dark:text-gray-300 mb-4">La commande demandée n'existe pas ou a été supprimée.</p>
-          <Link to="/commandes" className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
-            <ArrowLeft className="w-4 h-4" /><span>Retour aux commandes</span>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            Commande non trouvée
+          </h2>
+          <p className="text-gray-600 dark:text-gray-300 mb-4">
+            La commande demandée n'existe pas ou a été supprimée.
+          </p>
+          <Link
+            to="/commandes"
+            className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Retour aux commandes</span>
           </Link>
         </div>
       </div>
     );
   }
 
-  const getClientName = () =>
-    order.clientType === 'personne_physique' ? (order.clientName || 'Client particulier') : (order.client?.name || 'Client société');
-
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'livre':
-        return <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">✅ Livré</span>;
-    case 'en_cours_livraison':
-        return <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300">🚚 En cours de livraison</span>;
+        return (
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
+            ✅ Livré
+          </span>
+        );
+      case 'en_cours_livraison':
+        return (
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300">
+            🚚 En cours de livraison
+          </span>
+        );
       case 'annule':
-        return <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">❌ Annulé</span>;
+        return (
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
+            ❌ Annulé
+          </span>
+        );
       default:
         return null;
     }
   };
 
-  // ====== ACTIONS PDF ======
+  const getClientName = () =>
+    order.clientType === 'personne_physique'
+      ? (order.clientName || 'Client particulier')
+      : (order.client?.name || 'Client société');
+
+  // ----------------- Actions PDF -----------------
 
   const handleDownloadPDF = async () => {
-    const pdf = await buildPdf(); // save
+    const pdf = await buildPdf();
     pdf.save(`Bon_Livraison_${order.number}.pdf`);
   };
 
-  const handleOpenPrintTab = async () => {
-    const pdf = await buildPdf(); // open new tab & print
-    const blob = pdf.output('blob');
-    const url = URL.createObjectURL(blob);
-
-    // nouvelle fenêtre + impression
-    const win = window.open('', '_blank');
-    if (!win) return;
-    win.document.write(`
-      <!DOCTYPE html><html><head><title>Impression - ${order.number}</title></head>
-      <body style="margin:0">
-        <iframe src="${url}" style="border:0;position:fixed;top:0;left:0;width:100%;height:100%"></iframe>
-        <script>
-          const iframe = document.querySelector('iframe');
-          iframe.addEventListener('load', () => {
-            try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch(e) {}
-          });
-        </script>
-      </body></html>
-    `);
-    win.document.close();
+  const handlePrintInNewTab = async () => {
+    // why: ouvrir le viewer natif avec autoPrint → pas d’about:blank vide
+    const pdf = await buildPdf();
+    pdf.autoPrint();
+    const url = pdf.output('bloburl');
+    window.open(url, '_blank');
   };
 
-  /** Construit un jsPDF multi-page à partir d'un DOM hors-écran */
   const buildPdf = async () => {
     const { container, root, cleanup } = buildPdfDom();
     document.body.appendChild(container);
 
     try {
-      await waitForImages(root, 12000); // why: éviter canvas blanc
+      await waitForImages(root, 12000); // why: éviter canvas blanc si logo CORS lent
       const sections = Array.from(root.querySelectorAll<HTMLElement>('section.page'));
+
       const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
 
       for (let i = 0; i < sections.length; i++) {
-        const pageEl = sections[i];
+        const el = sections[i];
 
-        const canvas = await html2canvas(pageEl, {
+        const canvas = await html2canvas(el, {
           scale: 2,
           useCORS: true,
           backgroundColor: '#ffffff',
@@ -116,9 +140,8 @@ export default function OrderDetail() {
           allowTaint: false
         });
 
-        const imgData = canvas.toDataURL('image/jpeg', 0.98);
-        // Remplit toute la page A4
-        pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+        const img = canvas.toDataURL('image/jpeg', 0.98);
+        pdf.addImage(img, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
         if (i < sections.length - 1) pdf.addPage();
       }
 
@@ -128,12 +151,12 @@ export default function OrderDetail() {
     }
   };
 
-  /** Paginate items: 1ère / intermédiaires / dernière */
+  // ----------------- Génération DOM A4 -----------------
+
   const splitItems = (items: OrderItem[]) => {
     const FIRST = 12, MIDDLE = 18, LAST = 10;
     const pages: { rows: OrderItem[]; first: boolean; last: boolean }[] = [];
     if (items.length <= FIRST + LAST) return [{ rows: items, first: true, last: true }];
-
     pages.push({ rows: items.slice(0, FIRST), first: true, last: false });
     let i = FIRST;
     while (items.length - i > LAST) {
@@ -144,9 +167,8 @@ export default function OrderDetail() {
     return pages;
   };
 
-  /** DOM A4 multi-page hors-écran */
   const buildPdfDom = () => {
-    const logoUrl = (user as any)?.company?.logo || '';
+    const logoUrl = (user as any)?.company?.logoUrl || '';
     const companyName = user?.company?.name || '';
     const companyAddress = user?.company?.address || '';
     const companyPhone = user?.company?.phone || '';
@@ -165,7 +187,7 @@ export default function OrderDetail() {
 
     const container = document.createElement('div');
     container.style.position = 'fixed';
-    container.style.left = '-10000px'; // visible mais hors viewport
+    container.style.left = '-10000px'; // visible hors-viewport (pas opacity:0)
     container.style.top = '0';
     container.style.width = `${A4W}px`;
     container.style.background = '#fff';
@@ -222,10 +244,12 @@ export default function OrderDetail() {
       page.style.width = `${A4W}px`;
       page.style.height = `${A4H}px`;
 
-      const header = document.createElement('div');
-      header.innerHTML = headerHtml;
-      page.appendChild(header.firstElementChild!);
+      // Header
+      const headerWrap = document.createElement('div');
+      headerWrap.innerHTML = headerHtml;
+      page.appendChild(headerWrap.firstElementChild!);
 
+      // Body
       const body = document.createElement('div');
       body.className = 'page-body';
 
@@ -248,7 +272,7 @@ export default function OrderDetail() {
           <div class="card card--hint">
             <h3>INFORMATIONS</h3>
             <div class="kv"><span>Articles:</span> <b>${items.length}</b></div>
-            <div class="kv"><span>Quantité totale:</span> <b>${getTotalQuantity().toFixed(1)}</b></div>
+            <div class="kv"><span>Quantité totale:</span> <b>${formatQtyFR(getTotalQuantity(), '')}</b></div>
             <div class="kv"><span>TVA appliquée:</span> <b>${order.applyVat ? 'Oui' : 'Non'}</b></div>
           </div>
         `;
@@ -271,9 +295,9 @@ export default function OrderDetail() {
             p.rows.map((it) => `
               <tr>
                 <td>${it.productName}</td>
-                <td class="center">${it.quantity.toFixed(3)} ${it.unit || 'unité'}</td>
-                <td class="num">${it.unitPrice.toFixed(2)} MAD</td>
-                <td class="num"><b>${it.total.toFixed(2)} MAD</b></td>
+                <td class="center">${formatQtyFR(it.quantity, it.unit)} ${it.unit || ''}</td>
+                <td class="num">${formatMoneyFR(it.unitPrice)}</td>
+                <td class="num"><b>${formatMoneyFR(it.total)}</b></td>
               </tr>
             `).join('')
           }
@@ -286,9 +310,9 @@ export default function OrderDetail() {
         totals.className = 'totals';
         totals.innerHTML = `
           <div class="box">
-            <div class="row"><span><b>Sous-total HT</b></span><span>${Number(order.subtotal).toFixed(2)} MAD</span></div>
-            ${order.totalVat > 0 ? `<div class="row"><span><b>TVA</b></span><span>${Number(order.totalVat).toFixed(2)} MAD</span></div>` : ''}
-            <div class="row grand"><span>TOTAL TTC</span><span>${Number(order.totalTTC).toFixed(2)} MAD</span></div>
+            <div class="row"><span><b>Sous-total HT</b></span><span>${formatMoneyFR(order.subtotal)}</span></div>
+            ${order.totalVat > 0 ? `<div class="row"><span><b>TVA</b></span><span>${formatMoneyFR(order.totalVat)}</span></div>` : ''}
+            <div class="row grand"><span>TOTAL TTC</span><span>${formatMoneyFR(order.totalTTC)}</span></div>
           </div>
         `;
         body.appendChild(totals);
@@ -304,14 +328,15 @@ export default function OrderDetail() {
 
       page.appendChild(body);
 
-      const footer = document.createElement('div');
-      footer.innerHTML = footerHtml;
-      page.appendChild(footer.firstElementChild!);
+      // Footer
+      const footerWrap = document.createElement('div');
+      footerWrap.innerHTML = footerHtml;
+      page.appendChild(footerWrap.firstElementChild!);
 
       root.appendChild(page);
     });
 
-    // Si le logo casse (CORS), on le masque → pas de page blanche
+    // Si le logo échoue (CORS), on le masque pour éviter un canvas blanc
     root.querySelectorAll('img[data-logo]').forEach(img => {
       img.addEventListener('error', () => { (img as HTMLImageElement).style.display = 'none'; }, { once: true });
     });
@@ -320,7 +345,6 @@ export default function OrderDetail() {
     return { container, root, cleanup };
   };
 
-  /** CSS en px pour un rendu canvas stable */
   const getPdfCss = () => `
     :root{ --primary:#1f52d1; --ink:#0f172a; --muted:#64748b; --border:#e5e7eb; --muted-bg:#f7fafc; --accent:#eaf3ff; }
     *{ box-sizing:border-box; }
@@ -361,19 +385,18 @@ export default function OrderDetail() {
     .page-footer{ position:absolute; left:48px; right:48px; bottom:24px; border-top:1px solid var(--border); padding-top:8px; text-align:center; font-size:10px; color:#334155; }
   `;
 
-  /** attend le chargement des images du root */
   const waitForImages = (root: HTMLElement, timeoutMs = 10000) => {
     const imgs = Array.from(root.querySelectorAll('img'));
     if (imgs.length === 0) return Promise.resolve();
     return new Promise<void>((resolve) => {
       let done = 0;
-      const check = () => (++done === imgs.length) && resolve();
-      setTimeout(() => resolve(), timeoutMs); // ne pas bloquer
+      const tick = () => (++done === imgs.length) && resolve();
+      setTimeout(() => resolve(), timeoutMs);
       imgs.forEach((img) => {
         const el = img as HTMLImageElement;
-        if (el.complete && el.naturalWidth > 0) return check();
-        el.addEventListener('load', () => check(), { once: true });
-        el.addEventListener('error', () => { el.style.display = 'none'; check(); }, { once: true });
+        if (el.complete && el.naturalWidth > 0) return tick();
+        el.addEventListener('load', tick, { once: true });
+        el.addEventListener('error', () => { el.style.display = 'none'; tick(); }, { once: true });
       });
     });
   };
@@ -381,84 +404,96 @@ export default function OrderDetail() {
   const getTotalQuantity = () =>
     (order.items as OrderItem[]).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 
-  // ====== UI écran (inchangée) ======
+  // ----------------- UI écran (quantités FR) -----------------
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <button onClick={() => navigate('/commandes')} className="p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+          <button
+            onClick={() => navigate('/commandes')}
+            className="p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          >
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Commande {order.number}</h1>
-            <p className="text-gray-600 dark:text-gray-300">Détails et bon de livraison</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              Commande {order.number}
+            </h1>
+            <p className="text-gray-600 dark:text-gray-300">
+              Détails et bon de livraison
+            </p>
           </div>
         </div>
 
         <div className="flex items-center space-x-3">
-          <button onClick={handleDownloadPDF} className="inline-flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors">
-            <Download className="w-4 h-4" /><span>PDF</span>
+          <button
+            onClick={handleDownloadPDF}
+            className="inline-flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            <span>PDF</span>
           </button>
-          <button onClick={handleOpenPrintTab} className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
-            <Printer className="w-4 h-4" /><span>Imprimer (onglet)</span>
+          <button
+            onClick={handlePrintInNewTab}
+            className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            <Printer className="w-4 h-4" />
+            <span>Imprimer (onglet)</span>
           </button>
-          <Link to={`/commandes/${order.id}/modifier`} className="inline-flex items-center space-x-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg transition-colors">
-            <Edit className="w-4 h-4" /><span>Modifier</span>
+          <Link
+            to={`/commandes/${order.id}/modifier`}
+            className="inline-flex items-center space-x-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            <Edit className="w-4 h-4" />
+            <span>Modifier</span>
           </Link>
         </div>
       </div>
 
-      {/* --- votre UI à l’écran (inchangée) --- */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center space-x-3 mb-4">
-            <Package className="w-6 h-6 text-blue-600" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Informations Commande</h3>
-          </div>
-          <div className="space-y-3">
-            <div><span className="text-sm text-gray-600 dark:text-gray-400">Numéro:</span><p className="font-medium text-gray-900 dark:text-gray-100">{order.number}</p></div>
-            <div><span className="text-sm text-gray-600 dark:text-gray-400">Date de commande:</span><p className="font-medium text-gray-900 dark:text-gray-100">{new Date(order.orderDate).toLocaleString('fr-FR')}</p></div>
-            {order.deliveryDate && (<div><span className="text-sm text-gray-600 dark:text-gray-400">Date de livraison:</span><p className="font-medium text-gray-900 dark:text-gray-100">{new Date(order.deliveryDate).toLocaleString('fr-FR')}</p></div>)}
-            <div><span className="text-sm text-gray-600 dark:text-gray-400">Statut:</span><div className="mt-1">{getStatusBadge(order.status)}</div></div>
-            <div><span className="text-sm text-gray-600 dark:text-gray-400">Stock débité:</span><p className={`font-medium ${order.stockDebited ? 'text-red-600' : 'text-green-600'}`}>{order.stockDebited ? 'Oui' : 'Non'}</p></div>
-          </div>
-        </div>
+      {/* ... vos cartes d'infos ... */}
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center space-x-3 mb-4">
-            {order.clientType === 'personne_physique' ? <User className="w-6 h-6 text-green-600" /> : <Building2 className="w-6 h-6 text-blue-600" />}
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-              {order.clientType === 'personne_physique' ? 'Client Particulier' : 'Client Société'}
-            </h3>
-          </div>
-          <div className="space-y-3">
-            <div><span className="text-sm text-gray-600 dark:text-gray-400">Nom:</span><p className="font-medium text-gray-900 dark:text-gray-100">{getClientName()}</p></div>
-            {order.clientType === 'societe' && order.client && (
-              <>
-                <div><span className="text-sm text-gray-600 dark:text-gray-400">ICE:</span><p className="font-medium text-gray-900 dark:text-gray-100">{order.client.ice}</p></div>
-                <div className="flex items-center space-x-2"><MapPin className="w-4 h-4 text-gray-400" /><p className="text-sm text-gray-700 dark:text-gray-300">{order.client.address}</p></div>
-                <div className="flex items-center space-x-2"><Phone className="w-4 h-4 text-gray-400" /><p className="text-sm text-gray-700 dark:text-gray-300">{order.client.phone}</p></div>
-                <div className="flex items-center space-x-2"><Mail className="w-4 h-4 text-gray-400" /><p className="text-sm text-gray-700 dark:text-gray-300">{order.client.email}</p></div>
-              </>
-            )}
-          </div>
+      {/* Articles détaillés (affichage app, avec format FR) */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mt-6">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Articles Commandés</h3>
         </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center space-x-3 mb-4">
-            <DollarSign className="w-6 h-6 text-purple-600" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Totaux</h3>
-          </div>
-          <div className="space-y-3">
-            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Sous-total HT:</span><span className="font-medium text-gray-900 dark:text-gray-100">{Number(order.subtotal).toFixed(2)} MAD</span></div>
-            {order.totalVat > 0 && <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">TVA:</span><span className="font-medium text-gray-900 dark:text-gray-100">{Number(order.totalVat).toFixed(2)} MAD</span></div>}
-            <div className="border-t border-gray-200 dark:border-gray-600 pt-3">
-              <div className="flex justify-between"><span className="font-medium text-gray-900 dark:text-gray-100">Total TTC:</span><span className="text-xl font-bold text-blue-600">{Number(order.totalTTC).toFixed(2)} MAD</span></div>
-            </div>
-          </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-700">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Produit</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Quantité</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Prix Unitaire HT</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">TVA</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Total HT</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+              {(order.items as OrderItem[]).map((item, index) => (
+                <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{item.productName}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">Unité: {item.unit || ''}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    {formatQtyFR(item.quantity, item.unit)} {item.unit || ''}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    {formatMoneyFR(item.unitPrice)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    {(item.vatRate ?? 0)}%
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {formatMoneyFR(item.total)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
   );
 }
-
