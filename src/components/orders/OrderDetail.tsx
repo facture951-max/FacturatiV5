@@ -21,11 +21,11 @@ type OrderItem = {
   total: number;
 };
 
-// A4 en px @96dpi (stable pour html2canvas)
+// A4 px @96dpi (stable pour html2canvas)
 const A4W = 794;   // 210mm
 const A4H = 1123;  // 297mm
 
-// ----- Formatage FR -----
+// ---------- Formatage FR ----------
 const UNITS_3DP = new Set([
   'kg','kilogramme','kilogrammes',
   'l','litre','litres',
@@ -50,49 +50,48 @@ export default function OrderDetail() {
 
   const order = id ? getOrderById(id) : null;
 
+  // ------ Toolbar état (recherche/tri) ------
+  const [query, setQuery] = React.useState('');
+  const [sortBy, setSortBy] = React.useState<'name'|'qty'|'price'>('name');
+
   if (!order) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
-            Commande non trouvée
-          </h2>
-          <p className="text-gray-600 dark:text-gray-300 mb-4">
-            La commande demandée n'existe pas ou a été supprimée.
-          </p>
-          <Link
-            to="/commandes"
-            className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Retour aux commandes</span>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Commande non trouvée</h2>
+          <p className="text-gray-600 dark:text-gray-300 mb-4">La commande demandée n'existe pas ou a été supprimée.</p>
+          <Link to="/commandes" className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+            <ArrowLeft className="w-4 h-4" /><span>Retour aux commandes</span>
           </Link>
         </div>
       </div>
     );
   }
 
+  const filteredItems = React.useMemo(() => {
+    let arr = (order.items as OrderItem[]);
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      arr = arr.filter(it => (it.productName || '').toLowerCase().includes(q));
+    }
+    const copy = [...arr];
+    switch (sortBy) {
+      case 'qty':   copy.sort((a,b) => (b.quantity||0) - (a.quantity||0)); break;
+      case 'price': copy.sort((a,b) => (b.unitPrice||0) - (a.unitPrice||0)); break;
+      default:      copy.sort((a,b) => (a.productName||'').localeCompare(b.productName||'')); break;
+    }
+    return copy;
+  }, [order.items, query, sortBy]);
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'livre':
-        return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
-            ✅ Livré
-          </span>
-        );
+        return <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">✅ Livré</span>;
       case 'en_cours_livraison':
-        return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300">
-            🚚 En cours de livraison
-          </span>
-        );
+        return <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300">🚚 En cours de livraison</span>;
       case 'annule':
-        return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
-            ❌ Annulé
-          </span>
-        );
+        return <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">❌ Annulé</span>;
       default:
         return null;
     }
@@ -111,11 +110,10 @@ export default function OrderDetail() {
   };
 
   const handlePrintInNewTab = async () => {
-    // why: ouvrir le viewer natif avec autoPrint → pas d’about:blank vide
     const pdf = await buildPdf();
-    pdf.autoPrint();
+    pdf.autoPrint(); // déclenche la boîte d’impression dans le viewer
     const url = pdf.output('bloburl');
-    window.open(url, '_blank');
+    window.open(url, '_blank'); // ouvre dans un nouvel onglet (pas about:blank vide)
   };
 
   const buildPdf = async () => {
@@ -123,14 +121,12 @@ export default function OrderDetail() {
     document.body.appendChild(container);
 
     try {
-      await waitForImages(root, 12000); // why: éviter canvas blanc si logo CORS lent
+      await waitForImages(root, 12000); // éviter canvas blanc si logo CORS lent
       const sections = Array.from(root.querySelectorAll<HTMLElement>('section.page'));
-
       const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
 
       for (let i = 0; i < sections.length; i++) {
         const el = sections[i];
-
         const canvas = await html2canvas(el, {
           scale: 2,
           useCORS: true,
@@ -139,12 +135,10 @@ export default function OrderDetail() {
           logging: false,
           allowTaint: false
         });
-
         const img = canvas.toDataURL('image/jpeg', 0.98);
         pdf.addImage(img, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
         if (i < sections.length - 1) pdf.addPage();
       }
-
       return pdf;
     } finally {
       cleanup();
@@ -187,7 +181,7 @@ export default function OrderDetail() {
 
     const container = document.createElement('div');
     container.style.position = 'fixed';
-    container.style.left = '-10000px'; // visible hors-viewport (pas opacity:0)
+    container.style.left = '-10000px'; // visible hors-viewport (ne pas utiliser opacity:0)
     container.style.top = '0';
     container.style.width = `${A4W}px`;
     container.style.background = '#fff';
@@ -244,12 +238,10 @@ export default function OrderDetail() {
       page.style.width = `${A4W}px`;
       page.style.height = `${A4H}px`;
 
-      // Header
       const headerWrap = document.createElement('div');
       headerWrap.innerHTML = headerHtml;
       page.appendChild(headerWrap.firstElementChild!);
 
-      // Body
       const body = document.createElement('div');
       body.className = 'page-body';
 
@@ -328,7 +320,6 @@ export default function OrderDetail() {
 
       page.appendChild(body);
 
-      // Footer
       const footerWrap = document.createElement('div');
       footerWrap.innerHTML = footerHtml;
       page.appendChild(footerWrap.firstElementChild!);
@@ -336,7 +327,7 @@ export default function OrderDetail() {
       root.appendChild(page);
     });
 
-    // Si le logo échoue (CORS), on le masque pour éviter un canvas blanc
+    // évite crash si logo CORS échoue
     root.querySelectorAll('img[data-logo]').forEach(img => {
       img.addEventListener('error', () => { (img as HTMLImageElement).style.display = 'none'; }, { once: true });
     });
@@ -404,7 +395,7 @@ export default function OrderDetail() {
   const getTotalQuantity = () =>
     (order.items as OrderItem[]).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 
-  // ----------------- UI écran (quantités FR) -----------------
+  // ----------------- UI écran (Toolbar au-dessus du tableau) -----------------
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -451,30 +442,76 @@ export default function OrderDetail() {
         </div>
       </div>
 
-      {/* ... vos cartes d'infos ... */}
+      {/* ... cartes infos ... */}
 
-      {/* Articles détaillés (affichage app, avec format FR) */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mt-6">
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Articles Commandés</h3>
+      {/* Articles détaillés + TOOLBAR EN HAUT */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+        {/* Toolbar */}
+        <div className="px-6 pt-5">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              Articles Commandés
+            </h3>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">
+                Articles: {(order.items as OrderItem[]).length}
+              </span>
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200">
+                Quantité totale: {formatQtyFR(getTotalQuantity(), '')}
+              </span>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="ml-2 w-48 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Rechercher produit…"
+              />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1 text-sm focus:outline-none"
+                title="Trier"
+              >
+                <option value="name">Nom (A→Z)</option>
+                <option value="qty">Quantité (desc)</option>
+                <option value="price">Prix unitaire (desc)</option>
+              </select>
+            </div>
+          </div>
         </div>
+
+        <div className="mt-3 border-t border-gray-200 dark:border-gray-700" />
+
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Produit</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Quantité</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Prix Unitaire HT</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">TVA</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Total HT</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Produit
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Quantité
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Prix Unitaire HT
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  TVA
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Total HT
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {(order.items as OrderItem[]).map((item, index) => (
-                <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+              {filteredItems.map((item, index) => (
+                <tr key={`${item.productName}-${index}`} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{item.productName}</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">Unité: {item.unit || ''}</div>
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      {item.productName}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      Unité: {item.unit || ''}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                     {formatQtyFR(item.quantity, item.unit)} {item.unit || ''}
@@ -490,6 +527,13 @@ export default function OrderDetail() {
                   </td>
                 </tr>
               ))}
+              {filteredItems.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-6 py-6 text-sm text-gray-500 dark:text-gray-400">
+                    Aucun article ne correspond à “{query}”.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
